@@ -135,6 +135,11 @@ pub unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
 }
 
 #[allow(warnings)]
+pub unsafe fn Fr_pow(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Pow, to, a, b);
+}
+
+#[allow(warnings)]
 pub fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
     unsafe {
         *to = *a;
