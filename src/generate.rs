@@ -64,9 +64,11 @@ mod ffi {
         unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_copy(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize);
-        // unsafe fn Fr_neg(to: *mut FrElement, a: *const FrElement);
-        // unsafe fn Fr_inv(to: *mut FrElement, a: *const FrElement);
-        // unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_neg(to: *mut FrElement, a: *const FrElement);
+        unsafe fn Fr_inv(to: *mut FrElement, a: *const FrElement);
+        unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         // unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_shl(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
@@ -209,7 +211,7 @@ pub fn get_iosignals() -> Vec<InputOutputList> {
 /// Run cpp witness generator and optimize graph
 pub fn build_witness() -> eyre::Result<()> {
     let mut signal_values = vec![field::undefined(); ffi::get_total_signal_no() as usize];
-    signal_values[0] = field::constant(uint!(1_U256));
+    signal_values[0] = *field::ONE;
 
     let total_input_len =
         (ffi::get_main_input_signal_no() + ffi::get_main_input_signal_start()) as usize;
