@@ -69,6 +69,7 @@ mod ffi {
         unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_pow(to: &mut FrElement, a: *const FrElement, b: *const FrElement);
         // unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_shl(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
@@ -87,8 +88,6 @@ mod ffi {
         unsafe fn Fr_toInt(a: *mut FrElement) -> u64;
         unsafe fn Fr_lor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn print(a: *mut FrElement);
-        // fn Fr_pow(to: &mut FrElement, a: &FrElement, b: &FrElement);
-        // fn Fr_idiv(to: &mut FrElement, a: &FrElement, b: &FrElement);
     }
 
     // C++ types and signatures exposed to Rust.
