@@ -1,6 +1,9 @@
 use crate::graph::{Node, Operation};
 use ruint::{aliases::U256, uint};
-use std::{ptr, sync::Mutex};
+use std::{
+    ptr,
+    sync::{LazyLock, Mutex},
+};
 
 pub const M: U256 =
     uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
@@ -8,6 +11,9 @@ pub const M: U256 =
 pub const INV: u64 = 14042775128853446655;
 
 pub const R: U256 = uint!(0x0e0a77c19a07df2f666ea36f7879462e36fc76959f60cd29ac96341c4ffffffb_U256);
+
+pub static ZERO: LazyLock<FrElement> = LazyLock::new(|| constant(U256::ZERO));
+pub static ONE: LazyLock<FrElement> = LazyLock::new(|| constant(uint!(1_U256)));
 
 static NODES: Mutex<Vec<Node>> = Mutex::new(Vec::new());
 static VALUES: Mutex<Vec<U256>> = Mutex::new(Vec::new());
@@ -114,6 +120,21 @@ pub unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
 }
 
 #[allow(warnings)]
+pub unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Div, to, a, b);
+}
+
+#[allow(warnings)]
+pub unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Idiv, to, a, b);
+}
+
+#[allow(warnings)]
+pub unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Mod, to, a, b);
+}
+
+#[allow(warnings)]
 pub fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
     unsafe {
         *to = *a;
@@ -182,6 +203,16 @@ pub fn Fr_isTrue(a: *mut FrElement) -> bool {
     assert!(a < nodes.len());
     assert!(constant[a]);
     values[a] != U256::ZERO
+}
+
+pub fn Fr_neg(to: *mut FrElement, a: *const FrElement) {
+    // evaluate as binary operation
+    binop(Operation::Sub, to, &*ZERO, a);
+}
+
+pub fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
+    // evaluate as binary operation
+    binop(Operation::Div, to, &*ONE, a);
 }
 
 pub unsafe fn Fr_eq(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
