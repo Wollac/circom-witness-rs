@@ -119,6 +119,16 @@ pub unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
     binop(Operation::Sub, to, a, b);
 }
 
+pub fn Fr_neg(to: *mut FrElement, a: *const FrElement) {
+    // evaluate as binary operation
+    binop(Operation::Sub, to, &*ZERO, a);
+}
+
+pub fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
+    // evaluate as binary operation
+    binop(Operation::Div, to, &*ONE, a);
+}
+
 #[allow(warnings)]
 pub unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Div, to, a, b);
@@ -137,6 +147,11 @@ pub unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
 #[allow(warnings)]
 pub unsafe fn Fr_pow(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Pow, to, a, b);
+}
+
+#[allow(warnings)]
+pub unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement) {
+    binop(Operation::Mul, to, a, a);
 }
 
 #[allow(warnings)]
@@ -210,16 +225,6 @@ pub fn Fr_isTrue(a: *mut FrElement) -> bool {
     values[a] != U256::ZERO
 }
 
-pub fn Fr_neg(to: *mut FrElement, a: *const FrElement) {
-    // evaluate as binary operation
-    binop(Operation::Sub, to, &*ZERO, a);
-}
-
-pub fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
-    // evaluate as binary operation
-    binop(Operation::Div, to, &*ONE, a);
-}
-
 pub unsafe fn Fr_eq(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Eq, to, a, b);
 }
@@ -258,4 +263,12 @@ pub unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
 
 pub unsafe fn Fr_band(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Band, to, a, b);
+}
+
+pub unsafe fn Fr_bor(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Bor, to, a, b);
+}
+
+pub unsafe fn Fr_bxor(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Bxor, to, a, b);
 }

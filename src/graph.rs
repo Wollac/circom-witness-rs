@@ -1,14 +1,14 @@
+use crate::field::M;
+use ark_bn254::Fr;
+use ark_ff::{Field, PrimeField, Zero};
+use rand::Rng;
+use ruint::aliases::U256;
+use serde::{Deserialize, Serialize};
+use std::ops::{BitOr, BitXor};
 use std::{
     collections::HashMap,
     ops::{BitAnd, Shl, Shr},
 };
-
-use crate::field::M;
-use ark_bn254::Fr;
-use ark_ff::PrimeField;
-use rand::Rng;
-use ruint::aliases::U256;
-use serde::{Deserialize, Serialize};
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 
@@ -31,6 +31,8 @@ where
     a.map_err(serde::de::Error::custom)
 }
 
+const LBO_MASK: u64 = 0x3fffffffffffffff;
+
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Operation {
     Mul,
@@ -51,6 +53,8 @@ pub enum Operation {
     Shl,
     Shr,
     Band,
+    Bor,
+    Bxor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,10 +70,10 @@ impl Operation {
     pub fn eval(&self, a: U256, b: U256) -> U256 {
         use Operation::*;
         match self {
-            Add => a.add_mod(b, M),
-            Sub => a.add_mod(M - b, M),
+            Add => compute_add(a, b),
+            Sub => compute_sub(a, b),
             Mul => a.mul_mod(b, M),
-            Div => a.mul_mod(b.inv_mod(M).unwrap(), M),
+            Div => a.mul_mod(b.inv_mod(M).unwrap_or(U256::ZERO), M),
             Idiv => a / b,
             Mod => a.reduce_mod(b),
             Pow => a.pow_mod(b, M),
@@ -82,7 +86,9 @@ impl Operation {
             Lor => U256::from(a != U256::ZERO || b != U256::ZERO),
             Shl => compute_shl_uint(a, b),
             Shr => compute_shr_uint(a, b),
-            Band => a.bitand(b),
+            Band => compute_and(a, b),
+            Bor => compute_or(a, b),
+            Bxor => compute_xor(a, b),
             _ => unimplemented!("operator {:?} not implemented", self),
         }
     }
@@ -93,21 +99,78 @@ impl Operation {
             Add => a + b,
             Sub => a - b,
             Mul => a * b,
+            Div => a / b,
             _ => unimplemented!("operator {:?} not implemented for Montgomery", self),
         }
     }
 }
 
+fn compute_add(a: U256, b: U256) -> U256 {
+    debug_assert!(a < M);
+    debug_assert!(b < M);
+    let (mut result, overflow) = a.overflowing_add(b);
+    if overflow {
+        result -= M;
+    }
+    result
+}
+
+fn compute_sub(a: U256, b: U256) -> U256 {
+    debug_assert!(a < M);
+    debug_assert!(b < M);
+    let (mut result, overflow) = a.overflowing_sub(b);
+    if overflow {
+        result += M;
+    }
+    result
+}
+
 fn compute_shl_uint(a: U256, b: U256) -> U256 {
     debug_assert!(b.lt(&U256::from(256)));
     let ls_limb = b.as_limbs()[0];
-    a.shl(ls_limb as usize)
+    let mut result = a.shl(ls_limb as usize);
+    unsafe {
+        result.as_limbs_mut()[3] &= LBO_MASK;
+    }
+    if result >= M {
+        result -= M;
+    }
+    result
 }
 
 fn compute_shr_uint(a: U256, b: U256) -> U256 {
+    debug_assert!(a < M);
     debug_assert!(b.lt(&U256::from(256)));
     let ls_limb = b.as_limbs()[0];
     a.shr(ls_limb as usize)
+}
+
+fn compute_and(a: U256, b: U256) -> U256 {
+    debug_assert!(a < M);
+    debug_assert!(b < M);
+    a.bitand(b)
+}
+
+fn compute_or(a: U256, b: U256) -> U256 {
+    let mut result = a.bitor(b);
+    unsafe {
+        result.as_limbs_mut()[3] &= LBO_MASK;
+    }
+    if result >= M {
+        result -= M;
+    }
+    result
+}
+
+fn compute_xor(a: U256, b: U256) -> U256 {
+    let mut result = a.bitxor(b);
+    unsafe {
+        result.as_limbs_mut()[3] &= LBO_MASK;
+    }
+    if result >= M {
+        result -= M;
+    }
+    result
 }
 
 /// All references must be backwards.
@@ -134,7 +197,7 @@ pub fn evaluate(nodes: &[Node], inputs: &[U256], outputs: &[usize]) -> Vec<U256>
 
     // Evaluate the graph.
     let mut values = Vec::with_capacity(nodes.len());
-    for (_, &node) in nodes.iter().enumerate() {
+    for &node in nodes.iter() {
         let value = match node {
             Node::Constant(c) => Fr::new(c.into()),
             Node::MontConstant(c) => c,
@@ -329,8 +392,8 @@ pub fn montgomery_form(nodes: &mut [Node]) {
             Constant(c) => *node = MontConstant(Fr::new((*c).into())),
             MontConstant(..) => (),
             Input(..) => (),
-            Op(Add | Sub | Mul, ..) => (),
-            Op(..) => unimplemented!("Operators Montgomery form"),
+            Op(Add | Sub | Mul | Div, ..) => (),
+            Op(operation, ..) => unimplemented!("Operators Montgomery form {:?}", operation),
         }
     }
     eprintln!("Converted to Montgomery form");

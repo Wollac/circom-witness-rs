@@ -70,7 +70,10 @@ pub fn get_inputs_buffer(size: usize) -> Vec<U256> {
 }
 
 /// Calculates the position of the given signal in the inputs buffer
-pub fn get_input_mapping(input_list: &Vec<String>, graph: &Graph) -> HashMap<String, usize> {
+pub fn get_input_mapping<'a>(
+    input_list: impl IntoIterator<Item = &'a String>,
+    graph: &Graph,
+) -> HashMap<String, usize> {
     let mut input_mapping = HashMap::new();
     for key in input_list {
         let h = fnv1a(key);
@@ -104,7 +107,7 @@ pub fn calculate_witness(
     graph: &Graph,
 ) -> eyre::Result<Vec<U256>> {
     let mut inputs_buffer = get_inputs_buffer(get_inputs_size(graph));
-    let input_mapping = get_input_mapping(&input_list.keys().cloned().collect(), graph);
+    let input_mapping = get_input_mapping(input_list.keys(), graph);
     populate_inputs(&input_list, &input_mapping, &mut inputs_buffer);
     Ok(graph::evaluate(
         &graph.nodes,
