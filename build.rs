@@ -29,10 +29,9 @@ fn main() {
 
         cxx_build::bridge("src/generate.rs")
             .file("src/circuit.cc")
-            .flag_if_supported("-std=c++14")
-            .flag_if_supported("-w")
-            .flag_if_supported("-d")
-            .flag_if_supported("-g")
+            .std("c++14")
+            .warnings(false)
+            .opt_level(0)
             .compile("witness");
 
         println!("cargo:rerun-if-changed=src/main.rs");

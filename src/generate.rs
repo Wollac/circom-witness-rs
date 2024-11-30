@@ -2,16 +2,16 @@
 
 use crate::field::{self, *};
 use crate::graph::{self, Node};
-use crate::HashSignalInfo;
+use crate::{calculate_witness, init_graph, HashSignalInfo};
 use byteorder::{LittleEndian, ReadBytesExt};
 use ffi::InputOutputList;
 use ruint::{aliases::U256, uint};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::{io::Read, time::Instant};
 
 #[cxx::bridge]
 mod ffi {
-
     #[derive(Debug, Default, Clone)]
     pub struct InputOutputList {
         pub defs: Vec<IODef>,
@@ -70,12 +70,12 @@ mod ffi {
         unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_pow(to: &mut FrElement, a: *const FrElement, b: *const FrElement);
-        // unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement);
+        unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_shl(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_band(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        // fn Fr_bor(to: &mut FrElement, a: &FrElement, b: &FrElement);
-        // fn Fr_bxor(to: &mut FrElement, a: &FrElement, b: &FrElement);
+        unsafe fn Fr_bor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_bxor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         // fn Fr_bnot(to: &mut FrElement, a: &FrElement);
         unsafe fn Fr_eq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_neq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
@@ -153,7 +153,11 @@ pub fn get_constants() -> Vec<FrElement> {
         bytes.read_exact(&mut buf);
 
         if typ & 0x80000000 == 0 {
-            constants[i] = field::constant(U256::from(sv));
+            if sv >= 0 {
+                constants[i] = field::constant(U256::from(sv));
+            } else {
+                constants[i] = field::constant(M - U256::from(-sv));
+            }
         } else {
             constants[i] =
                 field::constant(U256::from_le_bytes(buf).mul_redc(uint!(1_U256), M, INV));
@@ -212,11 +216,9 @@ pub fn build_witness() -> eyre::Result<()> {
     let mut signal_values = vec![field::undefined(); ffi::get_total_signal_no() as usize];
     signal_values[0] = *field::ONE;
 
-    let total_input_len =
-        (ffi::get_main_input_signal_no() + ffi::get_main_input_signal_start()) as usize;
-
-    for i in 0..total_input_len {
-        signal_values[i + 1] = field::input(i + 1, uint!(0_U256));
+    for i in 0..ffi::get_main_input_signal_no() {
+        let si = (ffi::get_main_input_signal_start() + i) as usize;
+        signal_values[si] = field::input(si, uint!(0_U256));
     }
 
     let mut ctx = ffi::Circom_CalcWit {
@@ -235,7 +237,7 @@ pub fn build_witness() -> eyre::Result<()> {
     unsafe {
         ffi::run(&mut ctx as *mut _);
     }
-    eprintln!("Calculation took: {:?}", now.elapsed());
+    eprintln!("Generation took: {:?}", now.elapsed());
 
     let signal_values = get_witness_to_signal();
     let mut signals = signal_values
@@ -248,37 +250,27 @@ pub fn build_witness() -> eyre::Result<()> {
     // Optimize graph
     graph::optimize(&mut nodes, &mut signals);
 
+    // Print graph
+    for (i, node) in nodes.iter().enumerate() {
+        println!("node[{}] = {:?}", i, node);
+    }
+
     // Store graph to file.
     let input_map = get_input_hash_map();
     let bytes = postcard::to_stdvec(&(&nodes, &signals, &input_map)).unwrap();
     eprintln!("Graph size: {} bytes", bytes.len());
-    std::fs::write("graph.bin", bytes).unwrap();
+    std::fs::write("graph.bin", &bytes).unwrap();
 
     // Evaluate the graph.
     let input_len = (ffi::get_main_input_signal_no() + ffi::get_main_input_signal_start()) as usize; // TODO: fetch from file
     let mut inputs = vec![U256::from(0); input_len];
     inputs[0] = U256::from(1);
-    for i in 1..nodes.len() {
-        if let Node::Input(j) = nodes[i] {
-            inputs[j] = get_values()[i];
-        } else {
-            break;
-        }
-    }
 
     let now = Instant::now();
     for _ in 0..10 {
         _ = graph::evaluate(&nodes, &inputs, &signals);
     }
     eprintln!("Calculation took: {:?}", now.elapsed() / 10);
-
-    // Print graph
-    // for (i, node) in nodes.iter().enumerate() {
-    //     println!("node[{}] = {:?}", i, node);
-    // }
-    // for (i, j) in signals.iter().enumerate() {
-    //     println!("signal[{}] = node[{}]", i, j);
-    // }
 
     Ok(())
 }
