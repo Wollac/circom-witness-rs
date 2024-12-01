@@ -204,7 +204,6 @@ pub unsafe fn Fr_toInt(a: *const FrElement) -> u64 {
 
     let a = unsafe { (*a).0 };
     assert!(a < nodes.len());
-    assert!(constant[a]);
     values[a].try_into().unwrap()
 }
 
@@ -221,7 +220,6 @@ pub fn Fr_isTrue(a: *mut FrElement) -> bool {
 
     let a = unsafe { (*a).0 };
     assert!(a < nodes.len());
-    assert!(constant[a]);
     values[a] != U256::ZERO
 }
 
@@ -247,6 +245,10 @@ pub unsafe fn Fr_leq(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
 
 pub unsafe fn Fr_geq(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Geq, to, a, b);
+}
+
+pub unsafe fn Fr_land(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+    binop(Operation::Land, to, a, b);
 }
 
 pub unsafe fn Fr_lor(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {

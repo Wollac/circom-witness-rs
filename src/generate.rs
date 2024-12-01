@@ -86,6 +86,7 @@ mod ffi {
         unsafe fn Fr_isTrue(a: *mut FrElement) -> bool;
         // fn Fr_fromBool(to: &mut FrElement, a: bool);
         unsafe fn Fr_toInt(a: *mut FrElement) -> u64;
+        unsafe fn Fr_land(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_lor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn print(a: *mut FrElement);
     }
@@ -251,9 +252,9 @@ pub fn build_witness() -> eyre::Result<()> {
     graph::optimize(&mut nodes, &mut signals);
 
     // Print graph
-    for (i, node) in nodes.iter().enumerate() {
-        println!("node[{}] = {:?}", i, node);
-    }
+    // for (i, node) in nodes.iter().enumerate() {
+    //    println!("node[{}] = {:?}", i, node);
+    //}
 
     // Store graph to file.
     let input_map = get_input_hash_map();
