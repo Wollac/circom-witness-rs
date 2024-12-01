@@ -49,6 +49,7 @@ pub enum Operation {
     Gt,
     Leq,
     Geq,
+    Land,
     Lor,
     Shl,
     Shr,
@@ -83,6 +84,7 @@ impl Operation {
             Gt => U256::from(a > b),
             Leq => U256::from(a <= b),
             Geq => U256::from(a >= b),
+            Land => U256::from(a != U256::ZERO && b != U256::ZERO),
             Lor => U256::from(a != U256::ZERO || b != U256::ZERO),
             Shl => compute_shl_uint(a, b),
             Shr => compute_shr_uint(a, b),
@@ -100,7 +102,10 @@ impl Operation {
             Sub => a - b,
             Mul => a * b,
             Div => a / b,
-            _ => unimplemented!("operator {:?} not implemented for Montgomery", self),
+            _ => Fr::new(
+                self.eval(a.into_bigint().into(), b.into_bigint().into())
+                    .into(),
+            ),
         }
     }
 }
@@ -392,8 +397,7 @@ pub fn montgomery_form(nodes: &mut [Node]) {
             Constant(c) => *node = MontConstant(Fr::new((*c).into())),
             MontConstant(..) => (),
             Input(..) => (),
-            Op(Add | Sub | Mul | Div, ..) => (),
-            Op(operation, ..) => unimplemented!("Operators Montgomery form {:?}", operation),
+            Op(..) => (),
         }
     }
     eprintln!("Converted to Montgomery form");
