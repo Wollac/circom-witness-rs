@@ -3,14 +3,12 @@
 mod field;
 
 use crate::graph::{self};
-use crate::{calculate_witness, init_graph, HashSignalInfo};
+use crate::HashSignalInfo;
 use ark_bn254::Fr;
-use ark_ff::{BigInt, PrimeField};
 use byteorder::{LittleEndian, ReadBytesExt};
 use ffi::InputOutputList;
 use field::*;
 use ruint::{aliases::U256, uint};
-use std::collections::HashMap;
 use std::{io::Read, time::Instant};
 
 #[cxx::bridge]
@@ -62,36 +60,37 @@ mod ffi {
         ) -> String;
 
         // Field operations
-        unsafe fn Fr_mul(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        unsafe fn Fr_add(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_copy(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize);
+        unsafe fn Fr_add(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_neg(to: *mut FrElement, a: *const FrElement);
+        unsafe fn Fr_mul(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_inv(to: *mut FrElement, a: *const FrElement);
         unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_pow(to: &mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement);
-        unsafe fn Fr_shl(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_band(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_bor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_bxor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        // fn Fr_bnot(to: &mut FrElement, a: &FrElement);
+        // unsfafe fn Fr_bnot(to: &mut FrElement, a: &FrElement);
+        unsafe fn Fr_shl(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_shr(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_eq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_neq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_lt(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_gt(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_leq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
         unsafe fn Fr_geq(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_land(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        unsafe fn Fr_lor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
+        // unsafe fn Fr_lnot(to: *mut FrElement, a: *const FrElement);
+
         unsafe fn Fr_isTrue(a: *mut FrElement) -> bool;
         // fn Fr_fromBool(to: &mut FrElement, a: bool);
         unsafe fn Fr_toInt(a: *mut FrElement) -> u64;
-        unsafe fn Fr_land(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        unsafe fn Fr_lor(to: *mut FrElement, a: *const FrElement, b: *const FrElement);
-        unsafe fn print(a: *mut FrElement);
     }
 
     // C++ types and signatures exposed to Rust.
@@ -113,65 +112,59 @@ mod ffi {
 const DAT_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/constants.dat"));
 
 pub fn get_input_hash_map() -> Vec<HashSignalInfo> {
-    let mut bytes = &DAT_BYTES[..(ffi::get_size_of_input_hashmap() as usize) * 24];
-    let mut input_hash_map =
-        vec![HashSignalInfo::default(); ffi::get_size_of_input_hashmap() as usize];
-    for i in 0..ffi::get_size_of_input_hashmap() as usize {
-        let hash = bytes.read_u64::<LittleEndian>().unwrap();
-        let signalid = bytes.read_u64::<LittleEndian>().unwrap();
-        let signalsize = bytes.read_u64::<LittleEndian>().unwrap();
-        input_hash_map[i] = HashSignalInfo {
-            hash,
-            signalid,
-            signalsize,
-        };
-    }
-    input_hash_map
+    let mut bytes = &DAT_BYTES[..];
+
+    (0..ffi::get_size_of_input_hashmap())
+        .map(|_| HashSignalInfo {
+            hash: bytes.read_u64::<LittleEndian>().unwrap(),
+            signalid: bytes.read_u64::<LittleEndian>().unwrap(),
+            signalsize: bytes.read_u64::<LittleEndian>().unwrap(),
+        })
+        .collect()
 }
 
 pub fn get_witness_to_signal() -> Vec<usize> {
-    let mut bytes = &DAT_BYTES[(ffi::get_size_of_input_hashmap() as usize) * 24
-        ..(ffi::get_size_of_input_hashmap() as usize) * 24
-            + (ffi::get_size_of_witness() as usize) * 8];
-    let mut signal_list = Vec::with_capacity(ffi::get_size_of_witness() as usize);
-    for _ in 0..ffi::get_size_of_witness() as usize {
-        signal_list.push(bytes.read_u64::<LittleEndian>().unwrap() as usize);
-    }
-    signal_list
+    let mut bytes = &DAT_BYTES[(ffi::get_size_of_input_hashmap() as usize) * 24..];
+
+    (0..ffi::get_size_of_witness())
+        .map(|_| {
+            let si = bytes.read_u64::<LittleEndian>().unwrap();
+            si.try_into().unwrap()
+        })
+        .collect()
 }
 
 pub fn get_constants() -> Vec<FrElement> {
-    if ffi::get_size_of_constants() == 0 {
-        return vec![];
-    }
-
-    // skip the first part
     let mut bytes = &DAT_BYTES[(ffi::get_size_of_input_hashmap() as usize) * 24
         + (ffi::get_size_of_witness() as usize) * 8..];
-    let mut constants = vec![field::constant(U256::from(0)); ffi::get_size_of_constants() as usize];
-    for i in 0..ffi::get_size_of_constants() as usize {
-        let shortVal = bytes.read_i32::<LittleEndian>().unwrap();
-        let typ = bytes.read_u32::<LittleEndian>().unwrap();
 
-        let mut longVal = [0; 32];
-        bytes.read_exact(&mut longVal).unwrap();
+    (0..ffi::get_size_of_constants() as usize)
+        .map(|_| {
+            let shortVal = bytes.read_i32::<LittleEndian>().unwrap();
+            let typ = bytes.read_u32::<LittleEndian>().unwrap();
 
-        constants[i] = if typ & 0x80000000 != 0 {
-            if typ & 0x40000000 != 0 {
-                field::constant(U256::from_le_bytes(longVal).mul_redc(uint!(1_U256), M, Fr::INV))
+            let mut longVal = [0; 32];
+            bytes.read_exact(&mut longVal).unwrap();
+
+            if typ & 0x80000000 != 0 {
+                if typ & 0x40000000 != 0 {
+                    field::constant(U256::from_le_bytes(longVal).mul_redc(
+                        uint!(1_U256),
+                        M,
+                        Fr::INV,
+                    ))
+                } else {
+                    field::constant(U256::from_le_bytes(longVal))
+                }
             } else {
-                field::constant(U256::from_le_bytes(longVal))
+                if shortVal >= 0 {
+                    field::constant(U256::from(shortVal))
+                } else {
+                    field::constant(M - U256::from(-shortVal))
+                }
             }
-        } else {
-            if shortVal >= 0 {
-                field::constant(U256::from(shortVal))
-            } else {
-                field::constant(M - U256::from(-shortVal))
-            }
-        };
-    }
-
-    constants
+        })
+        .collect()
 }
 
 pub fn get_iosignals() -> Vec<InputOutputList> {
@@ -222,10 +215,9 @@ pub fn get_iosignals() -> Vec<InputOutputList> {
 pub fn build_witness() -> eyre::Result<()> {
     let mut signal_values = vec![field::undefined(); ffi::get_total_signal_no() as usize];
     signal_values[0] = *field::ONE;
-
     for i in 0..ffi::get_main_input_signal_no() {
         let si = (ffi::get_main_input_signal_start() + i) as usize;
-        signal_values[si] = field::input(si, uint!(0_U256));
+        signal_values[si] = field::input(si, U256::ZERO);
     }
 
     let mut ctx = ffi::Circom_CalcWit {
