@@ -1,21 +1,21 @@
 use crate::graph::{Node, Operation};
+use ark_bn254::Fr;
+use ark_ff::PrimeField;
 use ruint::{aliases::U256, uint};
 use std::{
     ptr,
     sync::{LazyLock, Mutex},
 };
 
-pub const M: U256 =
-    uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
-
-pub const INV: u64 = 14042775128853446655;
-
-pub static ZERO: LazyLock<FrElement> = LazyLock::new(|| constant(U256::ZERO));
-pub static ONE: LazyLock<FrElement> = LazyLock::new(|| constant(uint!(1_U256)));
+/// The modulus of the field.
+pub const M: U256 = U256::from_limbs(Fr::MODULUS.0);
 
 static NODES: Mutex<Vec<Node>> = Mutex::new(Vec::new());
 static VALUES: Mutex<Vec<U256>> = Mutex::new(Vec::new());
 static CONSTANT: Mutex<Vec<bool>> = Mutex::new(Vec::new());
+
+pub static ZERO: LazyLock<FrElement> = LazyLock::new(|| constant(U256::ZERO));
+pub static ONE: LazyLock<FrElement> = LazyLock::new(|| constant(uint!(1_U256)));
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FrElement(pub usize);
@@ -55,23 +55,7 @@ pub fn undefined() -> FrElement {
     FrElement(usize::MAX)
 }
 
-pub fn constant(c: U256) -> FrElement {
-    assert!(c < M);
-
-    let mut nodes = NODES.lock().unwrap();
-    let mut values = VALUES.lock().unwrap();
-    let mut constant = CONSTANT.lock().unwrap();
-    assert_eq!(nodes.len(), values.len());
-    assert_eq!(nodes.len(), constant.len());
-
-    nodes.push(Node::Constant(c));
-    values.push(c);
-    constant.push(true);
-
-    FrElement(nodes.len() - 1)
-}
-
-pub fn input(i: usize, value: U256) -> FrElement {
+pub fn constant(value: U256) -> FrElement {
     assert!(value < M);
 
     let mut nodes = NODES.lock().unwrap();
@@ -80,7 +64,23 @@ pub fn input(i: usize, value: U256) -> FrElement {
     assert_eq!(nodes.len(), values.len());
     assert_eq!(nodes.len(), constant.len());
 
-    nodes.push(Node::Input(i));
+    nodes.push(Node::Constant(value));
+    values.push(value);
+    constant.push(true);
+
+    FrElement(nodes.len() - 1)
+}
+
+pub fn input(signal_id: usize, value: U256) -> FrElement {
+    assert!(value < M);
+
+    let mut nodes = NODES.lock().unwrap();
+    let mut values = VALUES.lock().unwrap();
+    let mut constant = CONSTANT.lock().unwrap();
+    assert_eq!(nodes.len(), values.len());
+    assert_eq!(nodes.len(), constant.len());
+
+    nodes.push(Node::Input(signal_id));
     values.push(value);
     constant.push(false);
 
@@ -111,12 +111,10 @@ pub unsafe fn Fr_mul(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
     binop(Operation::Mul, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_add(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Add, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Sub, to, a, b);
 }
@@ -131,37 +129,30 @@ pub unsafe fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
     binop(Operation::Div, to, &*ONE, a);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_div(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Div, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_idiv(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Idiv, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_mod(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Mod, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_pow(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Pow, to, a, b);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement) {
     binop(Operation::Mul, to, a, a);
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
     *to = *a;
 }
 
-#[allow(warnings)]
 pub unsafe fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize) {
     ptr::copy_nonoverlapping(a, to, n);
 }
@@ -206,10 +197,6 @@ pub unsafe fn Fr_toInt(a: *const FrElement) -> u64 {
         eprintln!("Fr_toInt is only supported for constants");
     }
     values[a].try_into().unwrap()
-}
-
-pub unsafe fn print(a: *const FrElement) {
-    println!("DEBUG>> {:?}", (*a).0);
 }
 
 pub unsafe fn Fr_isTrue(a: *mut FrElement) -> bool {

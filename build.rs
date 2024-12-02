@@ -13,7 +13,7 @@ fn main() {
             .expect("Invalid circuit file name");
 
         let status = Command::new("circom")
-            .arg(&circuit_file)
+            .arg(circuit_file)
             .arg("-o")
             .arg(&out_dir)
             .arg("-c")

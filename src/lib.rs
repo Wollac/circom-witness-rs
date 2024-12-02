@@ -61,53 +61,34 @@ pub fn get_inputs_size(graph: &Graph) -> usize {
     max_index + 1
 }
 
-/// Allocates inputs vec with position 0 set to 1
-pub fn get_inputs_buffer(size: usize) -> Vec<U256> {
-    let mut inputs = vec![U256::ZERO; size];
-    inputs[0] = U256::from(1);
-    inputs
-}
-
-/// Calculates the position of the given signal in the inputs buffer
-pub fn get_input_mapping<'a>(
-    input_list: impl IntoIterator<Item = &'a String>,
-    graph: &Graph,
-) -> HashMap<String, usize> {
-    let mut input_mapping = HashMap::new();
-    for key in input_list {
-        let h = fnv1a(key);
-        let pos = graph
-            .input_mapping
-            .iter()
-            .position(|x| x.hash == h)
-            .unwrap();
-        let si = (graph.input_mapping[pos].signalid) as usize;
-        input_mapping.insert(key.to_string(), si);
-    }
-    input_mapping
-}
-
-/// Sets all provided inputs given the mapping and inputs buffer
-pub fn populate_inputs(
-    input_list: &HashMap<String, Vec<U256>>,
-    input_mapping: &HashMap<String, usize>,
-    input_buffer: &mut Vec<U256>,
-) {
-    for (key, value) in input_list {
-        let start = input_mapping[key];
-        let end = start + value.len();
-        input_buffer[start..end].copy_from_slice(value);
-    }
-}
-
 /// Calculate witness based on serialized graph and inputs
 pub fn calculate_witness(
-    input_list: HashMap<String, Vec<U256>>,
+    input_list: &HashMap<String, Vec<U256>>,
     graph: &Graph,
 ) -> eyre::Result<Vec<U256>> {
-    let mut inputs_buffer = get_inputs_buffer(get_inputs_size(graph));
-    let input_mapping = get_input_mapping(input_list.keys(), graph);
-    populate_inputs(&input_list, &input_mapping, &mut inputs_buffer);
+    let mut inputs_buffer = vec![U256::ZERO; get_inputs_size(graph)];
+
+    for (key, values) in input_list {
+        let h = fnv1a(key);
+        let mapping = &graph
+            .input_mapping
+            .iter()
+            .find(|item| item.hash == h)
+            .ok_or_else(|| eyre::eyre!("Signal not found for key: {}", key))?;
+
+        if values.len() as u64 != mapping.signalsize {
+            return Err(eyre::eyre!(
+                "Mismatch in signal size for key '{}': expected {}, got {}",
+                key,
+                mapping.signalsize,
+                values.len()
+            ));
+        }
+
+        let si = mapping.signalid as usize;
+        inputs_buffer[si..si + values.len()].copy_from_slice(values);
+    }
+
     Ok(graph::evaluate(
         &graph.nodes,
         &inputs_buffer,

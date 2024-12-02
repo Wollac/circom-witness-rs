@@ -28,10 +28,7 @@ fn generate_witness() {
     ]);
 
     let graph = init_graph(&bytes).unwrap();
-    let witnesses = calculate_witness(input.clone(), &graph).unwrap();
-    for w in &witnesses[1..=32] {
-        println!("{:x}", w);
-    }
+    let witnesses = calculate_witness(&input, &graph).unwrap();
 
     let temp_dir = tempdir().unwrap();
     let input_file = temp_dir.path().join("input.json");
