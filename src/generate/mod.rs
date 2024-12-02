@@ -1,12 +1,15 @@
 #![allow(non_snake_case)]
 
-use crate::field::{self, *};
-use crate::graph::{self, Node};
+mod field;
+
+use crate::graph::{self};
 use crate::{calculate_witness, init_graph, HashSignalInfo};
+use ark_bn254::Fr;
+use ark_ff::{BigInt, PrimeField};
 use byteorder::{LittleEndian, ReadBytesExt};
 use ffi::InputOutputList;
+use field::*;
 use ruint::{aliases::U256, uint};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{io::Read, time::Instant};
 
@@ -107,7 +110,7 @@ mod ffi {
     }
 }
 
-const DAT_BYTES: &[u8] = include_bytes!("constants.dat");
+const DAT_BYTES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/constants.dat"));
 
 pub fn get_input_hash_map() -> Vec<HashSignalInfo> {
     let mut bytes = &DAT_BYTES[..(ffi::get_size_of_input_hashmap() as usize) * 24];
@@ -131,7 +134,7 @@ pub fn get_witness_to_signal() -> Vec<usize> {
         ..(ffi::get_size_of_input_hashmap() as usize) * 24
             + (ffi::get_size_of_witness() as usize) * 8];
     let mut signal_list = Vec::with_capacity(ffi::get_size_of_witness() as usize);
-    for i in 0..ffi::get_size_of_witness() as usize {
+    for _ in 0..ffi::get_size_of_witness() as usize {
         signal_list.push(bytes.read_u64::<LittleEndian>().unwrap() as usize);
     }
     signal_list
@@ -147,25 +150,28 @@ pub fn get_constants() -> Vec<FrElement> {
         + (ffi::get_size_of_witness() as usize) * 8..];
     let mut constants = vec![field::constant(U256::from(0)); ffi::get_size_of_constants() as usize];
     for i in 0..ffi::get_size_of_constants() as usize {
-        let sv = bytes.read_i32::<LittleEndian>().unwrap() as i32;
-        let typ = bytes.read_u32::<LittleEndian>().unwrap() as u32;
+        let shortVal = bytes.read_i32::<LittleEndian>().unwrap();
+        let typ = bytes.read_u32::<LittleEndian>().unwrap();
 
-        let mut buf = [0; 32];
-        bytes.read_exact(&mut buf);
+        let mut longVal = [0; 32];
+        bytes.read_exact(&mut longVal).unwrap();
 
-        if typ & 0x80000000 == 0 {
-            if sv >= 0 {
-                constants[i] = field::constant(U256::from(sv));
+        constants[i] = if typ & 0x80000000 != 0 {
+            if typ & 0x40000000 != 0 {
+                field::constant(U256::from_le_bytes(longVal).mul_redc(uint!(1_U256), M, Fr::INV))
             } else {
-                constants[i] = field::constant(M - U256::from(-sv));
+                field::constant(U256::from_le_bytes(longVal))
             }
         } else {
-            constants[i] =
-                field::constant(U256::from_le_bytes(buf).mul_redc(uint!(1_U256), M, INV));
-        }
+            if shortVal >= 0 {
+                field::constant(U256::from(shortVal))
+            } else {
+                field::constant(M - U256::from(-shortVal))
+            }
+        };
     }
 
-    return constants;
+    constants
 }
 
 pub fn get_iosignals() -> Vec<InputOutputList> {
@@ -250,11 +256,12 @@ pub fn build_witness() -> eyre::Result<()> {
 
     // Optimize graph
     graph::optimize(&mut nodes, &mut signals);
+    eprintln!("Graph with {} nodes", nodes.len());
 
     // Print graph
     // for (i, node) in nodes.iter().enumerate() {
     //    println!("node[{}] = {:?}", i, node);
-    //}
+    // }
 
     // Store graph to file.
     let input_map = get_input_hash_map();

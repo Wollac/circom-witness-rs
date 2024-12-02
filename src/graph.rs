@@ -1,6 +1,5 @@
-use crate::field::M;
 use ark_bn254::Fr;
-use ark_ff::{Field, PrimeField, Zero};
+use ark_ff::{Field, PrimeField};
 use rand::Rng;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
@@ -11,6 +10,10 @@ use std::{
 };
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+use ruint::uint;
+
+pub const M: U256 =
+    uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
 
 fn ark_se<S, A: CanonicalSerialize>(a: &A, s: S) -> Result<S::Ok, S::Error>
 where
@@ -74,7 +77,7 @@ impl Operation {
             Add => compute_add(a, b),
             Sub => compute_sub(a, b),
             Mul => a.mul_mod(b, M),
-            Div => a.mul_mod(b.inv_mod(M).unwrap_or(U256::ZERO), M),
+            Div => b.inv_mod(M).map(|inv| a * inv).unwrap_or(U256::ZERO),
             Idiv => a / b,
             Mod => a.reduce_mod(b),
             Pow => a.pow_mod(b, M),
@@ -101,11 +104,12 @@ impl Operation {
             Add => a + b,
             Sub => a - b,
             Mul => a * b,
-            Div => a / b,
-            _ => Fr::new(
-                self.eval(a.into_bigint().into(), b.into_bigint().into())
-                    .into(),
-            ),
+            Div => b.inverse().map(|inv| a * inv).unwrap_or(Fr::ZERO),
+            _ => {
+                let a = a.into_bigint().into();
+                let b = b.into_bigint().into();
+                Fr::new(self.eval(a, b).into())
+            }
         }
     }
 }
@@ -114,7 +118,7 @@ fn compute_add(a: U256, b: U256) -> U256 {
     debug_assert!(a < M);
     debug_assert!(b < M);
     let (mut result, overflow) = a.overflowing_add(b);
-    if overflow {
+    if overflow || result >= M {
         result -= M;
     }
     result
@@ -314,7 +318,7 @@ fn random_eval(nodes: &mut Vec<Node>) -> Vec<U256> {
             // Constants evaluate to themselves
             Node::Constant(c) => *c,
 
-            Node::MontConstant(c) => unimplemented!("should not be used"),
+            Node::MontConstant(..) => unimplemented!("should not be used"),
 
             // Algebraic Ops are evaluated directly
             // Since the field is large, by Swartz-Zippel if
@@ -392,7 +396,6 @@ pub fn constants(nodes: &mut Vec<Node>) {
 pub fn montgomery_form(nodes: &mut [Node]) {
     for node in nodes.iter_mut() {
         use Node::*;
-        use Operation::*;
         match node {
             Constant(c) => *node = MontConstant(Fr::new((*c).into())),
             MontConstant(..) => (),
