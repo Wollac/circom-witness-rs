@@ -1,4 +1,3 @@
-mod field;
 pub mod graph;
 
 #[cfg(feature = "build-witness")]
