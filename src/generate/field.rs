@@ -43,6 +43,16 @@ pub fn print_eval() {
     );
 }
 
+pub fn trace(r: usize, nodes: &[Node]) -> Vec<(usize, &Node)>{
+    let n = &nodes[r];
+    match n {
+        Node::Input(_) => vec![(r,n)],
+        Node::Constant(_) => vec![(r,n)],
+        Node::MontConstant(_) => vec![(r,n)],
+        Node::Op(_, a, b) => [trace(*a, nodes), trace(*b, nodes), vec![(r,n)]].concat(),
+    }
+}
+
 pub fn get_graph() -> Vec<Node> {
     NODES.lock().unwrap().clone()
 }
@@ -51,7 +61,7 @@ pub fn get_values() -> Vec<U256> {
     VALUES.lock().unwrap().clone()
 }
 
-pub fn undefined() -> FrElement {
+pub const fn undefined() -> FrElement {
     FrElement(usize::MAX)
 }
 
@@ -101,7 +111,9 @@ fn binop(op: Operation, to: *mut FrElement, a: *const FrElement, b: *const FrEle
     *to = nodes.len() - 1;
 
     let (va, vb) = (values[a], values[b]);
-    values.push(op.eval(va, vb));
+    let value = op.eval(va, vb);
+    debug_assert!(value < M);
+    values.push(value);
 
     let (ca, cb) = (constant[a], constant[b]);
     constant.push(ca && cb);
@@ -209,6 +221,7 @@ pub unsafe fn Fr_isTrue(a: *mut FrElement) -> bool {
     let a = unsafe { (*a).0 };
     assert!(a < nodes.len());
     if !constant[a] {
+        dbg!(trace(a, nodes.as_slice()));
         eprintln!("Fr_isTrue is only supported for constants");
     }
     values[a] != U256::ZERO

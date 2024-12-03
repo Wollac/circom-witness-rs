@@ -1,19 +1,18 @@
 use ark_bn254::Fr;
 use ark_ff::{Field, PrimeField};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+use rand::rngs::ThreadRng;
 use rand::Rng;
-use ruint::aliases::U256;
+use ruint::aliases::{U256, U320};
+use ruint::Uint;
 use serde::{Deserialize, Serialize};
-use std::ops::{BitOr, BitXor};
 use std::{
     collections::HashMap,
     ops::{BitAnd, Shl, Shr},
+    ops::{BitOr, BitXor},
 };
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use ruint::uint;
-
-pub const M: U256 =
-    uint!(21888242871839275222246405745257275088548364400416034343698204186575808495617_U256);
+const M: U256 = U256::from_limbs(Fr::MODULUS.0);
 
 fn ark_se<S, A: CanonicalSerialize>(a: &A, s: S) -> Result<S::Ok, S::Error>
 where
@@ -39,7 +38,6 @@ const LBO_MASK: u64 = 0x3fffffffffffffff;
 #[derive(Hash, PartialEq, Eq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Operation {
     Mul,
-    MMul,
     Add,
     Sub,
     Div,
@@ -77,7 +75,7 @@ impl Operation {
             Add => compute_add(a, b),
             Sub => compute_sub(a, b),
             Mul => a.mul_mod(b, M),
-            Div => b.inv_mod(M).map(|inv| a * inv).unwrap_or(U256::ZERO),
+            Div => b.inv_mod(M).map_or(U256::ZERO, |inv| a.mul_mod(inv, M)),
             Idiv => a / b,
             Mod => a.reduce_mod(b),
             Pow => a.pow_mod(b, M),
@@ -94,7 +92,6 @@ impl Operation {
             Band => compute_and(a, b),
             Bor => compute_or(a, b),
             Bxor => compute_xor(a, b),
-            _ => unimplemented!("operator {:?} not implemented", self),
         }
     }
 
@@ -104,7 +101,7 @@ impl Operation {
             Add => a + b,
             Sub => a - b,
             Mul => a * b,
-            Div => b.inverse().map(|inv| a * inv).unwrap_or(Fr::ZERO),
+            Div => b.inverse().map_or(Fr::ZERO, |inv| a * inv),
             _ => {
                 let a = a.into_bigint().into();
                 let b = b.into_bigint().into();
@@ -236,11 +233,12 @@ pub fn propagate(nodes: &mut [Node]) {
                 // Not constant but equal
                 use Operation::*;
                 if let Some(c) = match op {
-                    Eq | Leq | Geq => Some(true),
-                    Neq | Lt | Gt => Some(false),
+                    Eq | Leq | Geq => Some(U256::from(true)),
+                    Neq | Lt | Gt => Some(U256::from(false)),
+                    Bxor => Some(U256::ZERO),
                     _ => None,
                 } {
-                    nodes[i] = Node::Constant(U256::from(c));
+                    nodes[i] = Node::Constant(c);
                     constants += 1;
                 }
             }
@@ -319,20 +317,27 @@ fn random_eval(nodes: &mut [Node]) -> Vec<U256> {
             Node::MontConstant(..) => unimplemented!("should not be used"),
 
             // Algebraic Ops are evaluated directly
-            // Since the field is large, by Swartz-Zippel if
-            // two values are the same then they are likely algebraically equal.
-            Node::Op(op @ (Add | Sub | Mul), a, b) => op.eval(values[*a], values[*b]),
+            // Since the field is large, according to Swartz-Zippel, if two values are equal, then they are probably algebraically equal.
+            Node::Op(op @ (Add | Sub | Mul | Div), a, b) => op.eval(values[*a], values[*b]),
 
             // Input and non-algebraic ops are random functions
-            // TODO: https://github.com/recmo/uint/issues/95 and use .gen_range(..M)
-            Node::Input(i) => *inputs.entry(*i).or_insert_with(|| rng.gen::<U256>() % M),
+            Node::Input(i) => *inputs.entry(*i).or_insert_with(|| uniform_value(&mut rng)),
             Node::Op(op, a, b) => *prfs
                 .entry((*op, values[*a], values[*b]))
-                .or_insert_with(|| rng.gen::<U256>() % M),
+                .or_insert_with(|| uniform_value(&mut rng)),
         };
         values.push(value);
     }
     values
+}
+
+fn uniform_value(rng: &mut ThreadRng) -> U256 {
+    // Sampling and reducing a U320 to get closer to a uniform distribution
+    // TODO: https://github.com/recmo/uint/issues/95 and use .gen_range(..M)
+    let u320 = rng
+        .gen::<U320>()
+        .reduce_mod(U320::from_limbs_slice(M.as_limbs()));
+    U256::from_limbs(u320.into_limbs()[..4].try_into().unwrap())
 }
 
 /// Value numbering
@@ -343,7 +348,7 @@ pub fn value_numbering(nodes: &mut [Node], outputs: &mut [usize]) {
     let values = random_eval(nodes);
 
     // Find all nodes with the same value.
-    let mut value_map = HashMap::new();
+    let mut value_map = HashMap::with_capacity(values.len());
     for (i, &value) in values.iter().enumerate() {
         value_map.entry(value).or_insert_with(Vec::new).push(i);
     }
@@ -387,7 +392,7 @@ pub fn constants(nodes: &mut [Node]) {
             constants += 1;
         }
     }
-    eprintln!("Found {} constants", constants);
+    eprintln!("Found {} implicit constants", constants);
 }
 
 /// Convert to Montgomery form
