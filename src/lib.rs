@@ -3,24 +3,29 @@ pub mod graph;
 #[cfg(feature = "build-witness")]
 pub mod generate;
 
-use std::collections::HashMap;
-
+use crate::graph::Node;
 use ruint::aliases::U256;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::graph::Node;
-
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct HashSignalInfo {
-    pub hash: u64,
-    pub signalid: u64,
-    pub signalsize: u64,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InputSignalInfo {
+    /// Unique identifier of the first corresponding signal.
+    pub id: usize,
+    /// Number of corresponding consecutive signals.
+    pub size: usize,
 }
 
+/// Represents the computational graph structure of a witness generation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Graph {
+    /// The nodes forming the abstract syntax tree (AST) of the graph.
     pub nodes: Vec<Node>,
-    pub signals: Vec<usize>,
-    pub input_mapping: Vec<HashSignalInfo>,
+    /// Maps each output to the index of its corresponding node in the `nodes` vector.
+    pub outputs: Vec<usize>,
+    /// Maps each input signal to its corresponding SignalInfo.
+    /// The key is the FNV-1a hash of the input's name for efficient lookup.
+    pub input_map: HashMap<u64, InputSignalInfo>,
 }
 
 fn fnv1a(s: &str) -> u64 {
@@ -34,14 +39,9 @@ fn fnv1a(s: &str) -> u64 {
 
 /// Loads the graph from bytes
 pub fn init_graph(graph_bytes: &[u8]) -> eyre::Result<Graph> {
-    let (nodes, signals, input_mapping): (Vec<Node>, Vec<usize>, Vec<HashSignalInfo>) =
-        postcard::from_bytes(graph_bytes)?;
+    let graph = postcard::from_bytes(graph_bytes)?;
 
-    Ok(Graph {
-        nodes,
-        signals,
-        input_mapping,
-    })
+    Ok(graph)
 }
 
 /// Calculates the number of needed inputs
@@ -69,29 +69,27 @@ pub fn calculate_witness(
     let mut inputs_buffer = vec![U256::ZERO; get_inputs_size(graph)];
 
     for (key, values) in input_list {
-        let h = fnv1a(key);
-        let mapping = &graph
-            .input_mapping
-            .iter()
-            .find(|item| item.hash == h)
+        let hash = fnv1a(key);
+        let signal = graph
+            .input_map
+            .get(&hash)
             .ok_or_else(|| eyre::eyre!("Signal not found for key: {}", key))?;
 
-        if values.len() as u64 != mapping.signalsize {
+        if values.len() != signal.size {
             return Err(eyre::eyre!(
                 "Mismatch in signal size for key '{}': expected {}, got {}",
                 key,
-                mapping.signalsize,
+                signal.size,
                 values.len()
             ));
         }
 
-        let si = mapping.signalid as usize;
-        inputs_buffer[si..si + values.len()].copy_from_slice(values);
+        inputs_buffer[signal.id..signal.id + values.len()].copy_from_slice(values);
     }
 
     Ok(graph::evaluate(
         &graph.nodes,
         &inputs_buffer,
-        &graph.signals,
+        &graph.outputs,
     ))
 }

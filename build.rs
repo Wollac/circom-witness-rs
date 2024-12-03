@@ -39,7 +39,7 @@ fn main() {
             .file(&cxx_file)
             .std("c++14")
             .warnings(false)
-            .opt_level(0)
+            .opt_level(0) // for large circuits, compile time is infeasible with optimization
             .compile("witness");
 
         println!("cargo::rerun-if-changed=build.rs");
