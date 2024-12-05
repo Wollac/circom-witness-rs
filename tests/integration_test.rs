@@ -27,6 +27,14 @@ fn generate_witness() {
         //("c".to_string(), vec![U256::from(5)]),
     ]);
 
+    // let input = HashMap::from([
+    //     ("secret".to_owned(), vec![U256::ZERO]),
+    //     ("merkleProofIndices".to_owned(), vec![U256::ZERO; 30]),
+    //     ("merkleProofSiblings".to_owned(), vec![U256::ZERO; 30]),
+    //     ("message".to_owned(), vec![U256::ZERO]),
+    //     ("scope".to_owned(), vec![U256::ZERO]),
+    // ]);
+
     let graph = init_graph(&bytes).unwrap();
     let witnesses = calculate_witness(&input, &graph).unwrap();
 
