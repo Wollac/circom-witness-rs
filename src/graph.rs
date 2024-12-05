@@ -4,7 +4,6 @@ use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use ruint::aliases::{U256, U320};
-use ruint::Uint;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
