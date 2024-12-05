@@ -150,28 +150,25 @@ pub fn get_constants() -> Vec<FrElement> {
         + (ffi::get_size_of_witness() as usize) * 8..];
     let mut constants = vec![field::constant(U256::from(0)); ffi::get_size_of_constants() as usize];
     for i in 0..ffi::get_size_of_constants() as usize {
-        let shortVal = bytes.read_i32::<LittleEndian>().unwrap();
-        let typ = bytes.read_u32::<LittleEndian>().unwrap();
+        let sv = bytes.read_i32::<LittleEndian>().unwrap() as i32;
+        let typ = bytes.read_u32::<LittleEndian>().unwrap() as u32;
 
-        let mut longVal = [0; 32];
-        bytes.read_exact(&mut longVal).unwrap();
+        let mut buf = [0; 32];
+        bytes.read_exact(&mut buf);
 
-        constants[i] = if typ & 0x80000000 != 0 {
-            if typ & 0x40000000 != 0 {
-                field::constant(U256::from_le_bytes(longVal).mul_redc(uint!(1_U256), M, Fr::INV))
+        if typ & 0x80000000 == 0 {
+            if sv >= 0 {
+                constants[i] = field::constant(U256::from(sv));
             } else {
-                field::constant(U256::from_le_bytes(longVal))
+                constants[i] = field::constant(M - U256::from(-sv));
             }
         } else {
-            if shortVal >= 0 {
-                field::constant(U256::from(shortVal))
-            } else {
-                field::constant(M - U256::from(-shortVal))
-            }
-        };
+            constants[i] =
+                field::constant(U256::from_le_bytes(buf).mul_redc(uint!(1_U256), M, INV));
+        }
     }
 
-    constants
+    return constants;
 }
 
 pub fn get_iosignals() -> Vec<InputOutputList> {
@@ -256,7 +253,6 @@ pub fn build_witness() -> eyre::Result<()> {
 
     // Optimize graph
     graph::optimize(&mut nodes, &mut signals);
-    eprintln!("Graph with {} nodes", nodes.len());
 
     // Print graph
     // for (i, node) in nodes.iter().enumerate() {

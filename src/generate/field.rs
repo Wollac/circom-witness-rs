@@ -56,8 +56,6 @@ pub fn undefined() -> FrElement {
 }
 
 pub fn constant(c: U256) -> FrElement {
-    assert!(c < M);
-
     let mut nodes = NODES.lock().unwrap();
     let mut values = VALUES.lock().unwrap();
     let mut constant = CONSTANT.lock().unwrap();
@@ -72,8 +70,6 @@ pub fn constant(c: U256) -> FrElement {
 }
 
 pub fn input(i: usize, value: U256) -> FrElement {
-    assert!(value < M);
-
     let mut nodes = NODES.lock().unwrap();
     let mut values = VALUES.lock().unwrap();
     let mut constant = CONSTANT.lock().unwrap();
@@ -202,9 +198,6 @@ pub unsafe fn Fr_toInt(a: *const FrElement) -> u64 {
 
     let a = unsafe { (*a).0 };
     assert!(a < nodes.len());
-    if !constant[a] {
-        eprintln!("Fr_toInt is only supported for constants");
-    }
     values[a].try_into().unwrap()
 }
 
@@ -221,9 +214,6 @@ pub unsafe fn Fr_isTrue(a: *mut FrElement) -> bool {
 
     let a = unsafe { (*a).0 };
     assert!(a < nodes.len());
-    if !constant[a] {
-        eprintln!("Fr_isTrue is only supported for constants");
-    }
     values[a] != U256::ZERO
 }
 
