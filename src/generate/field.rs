@@ -10,6 +10,8 @@ pub const M: U256 =
 
 pub const INV: u64 = 14042775128853446655;
 
+pub const R: U256 = uint!(0x0e0a77c19a07df2f666ea36f7879462e36fc76959f60cd29ac96341c4ffffffb_U256);
+
 pub static ZERO: LazyLock<FrElement> = LazyLock::new(|| constant(U256::ZERO));
 pub static ONE: LazyLock<FrElement> = LazyLock::new(|| constant(uint!(1_U256)));
 
@@ -103,7 +105,7 @@ fn binop(op: Operation, to: *mut FrElement, a: *const FrElement, b: *const FrEle
     constant.push(ca && cb);
 }
 
-pub unsafe fn Fr_mul(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
+pub fn Fr_mul(to: *mut FrElement, a: *const FrElement, b: *const FrElement) {
     binop(Operation::Mul, to, a, b);
 }
 
@@ -117,12 +119,12 @@ pub unsafe fn Fr_sub(to: *mut FrElement, a: *const FrElement, b: *const FrElemen
     binop(Operation::Sub, to, a, b);
 }
 
-pub unsafe fn Fr_neg(to: *mut FrElement, a: *const FrElement) {
+pub fn Fr_neg(to: *mut FrElement, a: *const FrElement) {
     // evaluate as binary operation
     binop(Operation::Sub, to, &*ZERO, a);
 }
 
-pub unsafe fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
+pub fn Fr_inv(to: *mut FrElement, a: *const FrElement) {
     // evaluate as binary operation
     binop(Operation::Div, to, &*ONE, a);
 }
@@ -153,13 +155,17 @@ pub unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement) {
 }
 
 #[allow(warnings)]
-pub unsafe fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
-    *to = *a;
+pub fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
+    unsafe {
+        *to = *a;
+    }
 }
 
 #[allow(warnings)]
-pub unsafe fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize) {
-    ptr::copy_nonoverlapping(a, to, n);
+pub fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize) {
+    unsafe {
+        ptr::copy_nonoverlapping(a, to, n);
+    }
 }
 
 /// Create a vector of FrElement with length `len`.
@@ -205,7 +211,7 @@ pub unsafe fn print(a: *const FrElement) {
     println!("DEBUG>> {:?}", (*a).0);
 }
 
-pub unsafe fn Fr_isTrue(a: *mut FrElement) -> bool {
+pub fn Fr_isTrue(a: *mut FrElement) -> bool {
     let nodes = NODES.lock().unwrap();
     let values = VALUES.lock().unwrap();
     let constant = CONSTANT.lock().unwrap();
