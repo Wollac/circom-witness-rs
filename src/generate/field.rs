@@ -112,6 +112,8 @@ fn binop(op: Operation, to: *mut FrElement, a: *const FrElement, b: *const FrEle
     assert_eq!(nodes.len(), values.len());
     assert_eq!(nodes.len(), constant.len());
 
+    eprintln!("Fr_{op:?}");
+
     let (a, b, to) = unsafe { ((*a).0, (*b).0, &mut (*to).0) };
     assert!(a < nodes.len());
     assert!(b < nodes.len());
@@ -170,20 +172,24 @@ pub unsafe fn Fr_square(to: *mut FrElement, a: *const FrElement) {
 }
 
 pub unsafe fn Fr_copy(to: *mut FrElement, a: *const FrElement) {
+    eprintln!("Fr_copy");
     *to = *a;
 }
 
 pub unsafe fn Fr_copyn(to: *mut FrElement, a: *const FrElement, n: usize) {
+    eprintln!("Fr_copyn");
     ptr::copy_nonoverlapping(a, to, n);
 }
 
 /// Create a vector of FrElement with length `len`.
 /// Needed because the default constructor of opaque type is not implemented.
 pub fn create_vec(len: usize) -> Vec<FrElement> {
+    eprintln!("create_vec");
     vec![FrElement(usize::MAX); len]
 }
 
 pub fn create_vec_u32(len: usize) -> Vec<u32> {
+    eprintln!("create_vec_u32");
     vec![0; len]
 }
 
@@ -193,6 +199,7 @@ pub fn generate_position_array(
     size_dimensions: u32,
     index: u32,
 ) -> String {
+    eprintln!("generate_position_array");
     let mut positions: String = prefix;
     let mut index = index;
     for i in 0..size_dimensions {
@@ -205,6 +212,7 @@ pub fn generate_position_array(
 }
 
 pub unsafe fn Fr_toInt(a: *const FrElement) -> u64 {
+    eprintln!("Fr_toInt");
     let nodes = NODES.lock().unwrap();
     let values = VALUES.lock().unwrap();
     let constant = CONSTANT.lock().unwrap();
@@ -221,6 +229,7 @@ pub unsafe fn Fr_toInt(a: *const FrElement) -> u64 {
 }
 
 pub unsafe fn Fr_isTrue(a: *mut FrElement) -> bool {
+    eprintln!("Fr_isTrue");
     let nodes = NODES.lock().unwrap();
     let values = VALUES.lock().unwrap();
     let constant = CONSTANT.lock().unwrap();
