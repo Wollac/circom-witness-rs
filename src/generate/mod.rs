@@ -132,9 +132,9 @@ pub fn get_input_hash_map() -> Vec<HashSignalInfo> {
 pub fn get_witness_to_signal() -> Vec<usize> {
     let mut bytes = &DAT_BYTES[(ffi::get_size_of_input_hashmap() as usize) * 24
         ..(ffi::get_size_of_input_hashmap() as usize) * 24
-            + (ffi::get_size_of_witness() as usize) * 8];
+        + (ffi::get_size_of_witness() as usize) * 8];
     let mut signal_list = Vec::with_capacity(ffi::get_size_of_witness() as usize);
-    for _ in 0..ffi::get_size_of_witness() as usize {
+    for i in 0..ffi::get_size_of_witness() as usize {
         signal_list.push(bytes.read_u64::<LittleEndian>().unwrap() as usize);
     }
     signal_list
@@ -257,7 +257,7 @@ pub fn build_witness() -> eyre::Result<()> {
     // Print graph
     // for (i, node) in nodes.iter().enumerate() {
     //    println!("node[{}] = {:?}", i, node);
-    // }
+    //}
 
     // Store graph to file.
     let input_map = get_input_hash_map();
